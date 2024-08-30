@@ -1,100 +1,185 @@
 const express = require('express');
-const mysql = require('mysql');
+const bodyParser = require('body-parser');
 const cors = require('cors');
+const multer = require('multer'); // Middleware for handling multipart/form-data
+const path = require('path');
+const fs = require('fs');
+const csvParser = require('csv-parser'); // Library to parse CSV files
+const mysql = require('mysql');
 
+// Initialize Express app
 const app = express();
-const port = 5000;
+const port = 5000; // Adjust the port as needed
 
-// Enable CORS to allow requests from your React app
+// Middleware
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
 // MySQL Database Connection
 const db = mysql.createConnection({
-    host: '192.168.27.143',
-    user: 'saideep',
-    password: 'Lenskart@123',
-    database: 'PackingDispatchDB'
-  });
-  
-  db.connect(err => {
+  host: '192.168.27.143',
+  user: 'saideep',
+  password: 'Lenskart@123',
+  database: 'PackingDispatchDB'
+});
+
+db.connect(err => {
+  if (err) {
+    console.error('Error connecting to the database:', err.stack);
+    return;
+  }
+  console.log('Connected to the MySQL database.');
+});
+
+// Setup Multer for file uploads
+const upload = multer({ dest: 'uploads/' }); // Files will be temporarily stored in the 'uploads' directory
+
+// API endpoint to handle CSV data upload
+app.post('/api/upload-csv', upload.single('file'), (req, res) => {
+  console.log('File received:', req.file);
+
+  if (!req.file) {
+    return res.status(400).send('No file uploaded.');
+  }
+
+  const filePath = path.join(__dirname, 'uploads', req.file.filename);
+  console.log('File path:', filePath);
+
+  const results = [];
+
+  // Parse CSV file
+  fs.createReadStream(filePath)
+    .pipe(csvParser())
+    .on('data', (row) => {
+      console.log('Row data:', row);
+
+      const { name, employeeid, doj, ageing, gender, agency, education, throughput, attendance, stationid, shift } = row;
+
+      results.push({
+        name,
+        employeeid,
+        doj,
+        ageing,
+        gender,
+        agency,
+        education,
+        throughput,
+        attendance: attendance || '0000000000000000000000000000000',
+        stationid: stationid || null,
+        shift: shift || null
+      });
+    })
+    .on('end', async () => {
+      console.log('CSV parsing complete, processing data...');
+
+      try {
+        for (let user of results) {
+          const { employeeid, name, doj, ageing, gender, agency, education, throughput, attendance, stationid, shift } = user;
+
+          // Check if user exists
+          const queryCheck = 'SELECT * FROM Employees WHERE employeeid = ?';
+          db.query(queryCheck, [employeeid], (err, existingUser) => {
+            if (err) {
+              console.error('Error checking user:', err);
+              return res.status(500).send('Error checking user');
+            }
+
+            if (existingUser.length > 0) {
+              console.log(`User with employeeid ${employeeid} already exists. Updating record.`);
+
+              // Update fields but do not overwrite attendance
+              const queryUpdate = `
+                UPDATE Employees 
+                SET name = ?, doj = ?, ageing = ?, gender = ?, agency = ?, education = ?, throughput = ?, stationid = ?, shift = ?
+                WHERE employeeid = ?
+              `;
+              db.query(queryUpdate, [name, doj, ageing, gender, agency, education, throughput, stationid, shift, employeeid], (err, result) => {
+                if (err) {
+                  console.error('Error updating user:', err);
+                }
+              });
+            } else {
+              console.log(`Adding new user with employeeid ${employeeid}.`);
+              const queryInsert = `
+                INSERT INTO Employees (name, employeeid, doj, ageing, gender, agency, education, throughput, attendance, stationid, shift)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `;
+              db.query(queryInsert, [name, employeeid, doj, ageing, gender, agency, education, throughput, attendance, stationid, shift], (err, result) => {
+                if (err) {
+                  console.error('Error inserting user:', err);
+                }
+              });
+            }
+          });
+        }
+
+        res.status(200).send('CSV processed successfully');
+      } catch (err) {
+        console.error('Error processing CSV data:', err);
+        res.status(500).send('Error processing CSV data');
+      } finally {
+        fs.unlinkSync(filePath);
+      }
+    })
+    .on('error', (err) => {
+      console.error('Error reading CSV file:', err.stack);
+      res.status(500).send('Error reading CSV file');
+    });
+});
+
+// API to get a single user by employeeid
+app.get('/api/user/:employeeid', (req, res) => {
+  const { employeeid } = req.params;
+
+  const query = 'SELECT * FROM Employees WHERE employeeid = ?';
+
+  db.query(query, [employeeid], (err, result) => {
     if (err) {
-      console.error('Error connecting to the database:', err.stack);
-      return;
+      console.error('Error fetching user:', err);
+      res.status(500).send('Error fetching user');
+    } else if (result.length === 0) {
+      res.status(404).send('User not found');
+    } else {
+      res.status(200).json(result[0]);
     }
-    console.log('Connected to the MySQL database.');
   });
-
-
-// API endpoint to handle data entry
-app.post('/api/data-entry', async (req, res) => {
-  const { skuId, dateOfScan, timestamp, stationId, nexsId } = req.body;
-  const query = 'INSERT INTO entries (skuId, dateOfScan, timestamp, stationId, nexsId) VALUES (@skuId, @dateOfScan, @timestamp, @stationId, @nexsId)';
-
-  try {
-    await db.request()
-      .input('skuId', sql.VarChar, skuId)
-      .input('dateOfScan', sql.Date, dateOfScan)
-      .input('timestamp', sql.Time, timestamp)
-      .input('stationId', sql.VarChar, stationId)
-      .input('nexsId', sql.VarChar, nexsId)
-      .query(query);
-
-    res.status(200).send('Data inserted successfully');
-  } catch (err) {
-    console.error('Error inserting data:', err);
-    res.status(500).send('Error inserting data');
-  }
 });
 
-// API endpoint to check for duplicate SKU ID and Station ID
-app.get('/api/check-duplicate', async (req, res) => {
-  const { skuId, stationId } = req.query;
-  const query = 'SELECT COUNT(*) AS count FROM entries WHERE skuId = @skuId AND stationId = @stationId';
+// API to update a user (only Station ID and Shift)
+app.post('/api/update-user', (req, res) => {
+  const { employeeid, stationid, shift } = req.body;
 
-  try {
-    const result = await db.request()
-      .input('skuId', sql.VarChar, skuId)
-      .input('stationId', sql.VarChar, stationId)
-      .query(query);
-
-    const isDuplicate = result.recordset[0].count > 0;
-    res.json({ isDuplicate });
-  } catch (err) {
-    console.error('Error checking for duplicates:', err);
-    res.status(500).send('Error checking for duplicates');
-  }
-});
-
-// API endpoint to retrieve all data
-app.get('/api/data', async (req, res) => {
-  const query = 'SELECT * FROM entries';
-
-  try {
-    const result = await db.request().query(query);
-    res.json(result.recordset);
-  } catch (err) {
-    console.error('Error fetching data:', err);
-    res.status(500).send('Error fetching data');
-  }
-});
-
-// API endpoint to fetch redundant SKUs with the most recent date and timestamp
-app.get('/api/redundant-skus', async (req, res) => {
   const query = `
-    SELECT skuId, stationId, COUNT(*) as scanCount, MAX(dateOfScan) as mostRecentDate, MAX(timestamp) as mostRecentTimestamp
-    FROM entries
-    GROUP BY skuId, stationId
-    HAVING COUNT(*) > 1;
+    UPDATE Employees
+    SET stationid = ?, shift = ?
+    WHERE employeeid = ?
   `;
 
-  try {
-    const result = await db.request().query(query);
-    res.json(result.recordset);
-  } catch (err) {
-    console.error('Error fetching redundant SKUs:', err);
-    res.status(500).send('Error fetching redundant SKUs');
-  }
+  db.query(query, [stationid, shift, employeeid], (err, result) => {
+    if (err) {
+      console.error('Error updating user:', err);
+      res.status(500).send('Error updating user');
+    } else {
+      res.status(200).send('User updated successfully');
+    }
+  });
+});
+
+// API to remove a user
+app.delete('/api/remove-user/:employeeid', (req, res) => {
+  const { employeeid } = req.params;
+
+  const query = 'DELETE FROM Employees WHERE employeeid = ?';
+
+  db.query(query, [employeeid], (err, result) => {
+    if (err) {
+      console.error('Error removing user:', err);
+      res.status(500).send('Error removing user');
+    } else {
+      res.status(200).send(`User with employeeid ${employeeid} removed`);
+    }
+  });
 });
 
 // Start the server
