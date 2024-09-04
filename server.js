@@ -181,7 +181,105 @@ app.delete('/api/remove-user/:employeeid', (req, res) => {
     }
   });
 });
+// API to update attendance for a specific employee
+app.post('/api/update-attendance', (req, res) => {
+  const { employeeid } = req.body;
 
+  // Get the current day of the month (1-31)
+  const today = new Date().getDate();
+
+  // Query to get the current attendance array for the user
+  const queryGetAttendance = `
+    SELECT attendance FROM Employees WHERE employeeid = ?
+  `;
+
+  db.query(queryGetAttendance, [employeeid], (err, result) => {
+    if (err) {
+      console.error('Error fetching attendance:', err);
+      return res.status(500).send('Error fetching attendance');
+    }
+
+    if (result.length === 0) {
+      return res.status(404).send('User not found');
+    }
+
+    let attendance = result[0].attendance || '0000000000000000000000000000000';
+
+    attendance = attendance.split('');
+    attendance[today - 1] = '1'; 
+    attendance = attendance.join('');
+
+    const queryUpdateAttendance = `
+      UPDATE Employees
+      SET attendance = ?
+      WHERE employeeid = ?
+    `;
+
+    db.query(queryUpdateAttendance, [attendance, employeeid], (err, result) => {
+      if (err) {
+        console.error('Error updating attendance:', err);
+        return res.status(500).send('Error updating attendance');
+      }
+
+      res.status(200).send('Attendance updated successfully');
+    });
+  });
+});
+app.post('/api/add-user', (req, res) => {
+  const {
+    name,
+    employeeid,
+    gender,
+    education,
+    stationid,
+    shift,
+    attendance,
+    agency,
+    doj,
+    ageing,
+    throughput
+  } = req.body;
+
+  // Check if the employee already exists
+  const queryCheck = 'SELECT * FROM Employees WHERE employeeid = ?';
+  db.query(queryCheck, [employeeid], (err, existingUser) => {
+    if (err) {
+      console.error('Error checking user:', err);
+      return res.status(500).send('Error checking user');
+    }
+
+    if (existingUser.length > 0) {
+      console.log(`User with employeeid ${employeeid} already exists. Updating record.`);
+
+      // Update the existing user
+      const queryUpdate = `
+        UPDATE Employees 
+        SET name = ?, doj = ?, ageing = ?, gender = ?, agency = ?, education = ?, throughput = ?, stationid = ?, shift = ?
+        WHERE employeeid = ?
+      `;
+      db.query(queryUpdate, [name, doj, ageing, gender, agency, education, throughput, stationid, shift, employeeid], (err, result) => {
+        if (err) {
+          console.error('Error updating user:', err);
+          return res.status(500).send('Error updating user');
+        }
+        res.status(200).send('User updated successfully');
+      });
+    } else {
+      console.log(`Adding new user with employeeid ${employeeid}.`);
+      const queryInsert = `
+        INSERT INTO Employees (name, employeeid, doj, ageing, gender, agency, education, throughput, attendance, stationid, shift)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+      db.query(queryInsert, [name, employeeid, doj, ageing, gender, agency, education, throughput, attendance, stationid, shift], (err, result) => {
+        if (err) {
+          console.error('Error inserting user:', err);
+          return res.status(500).send('Error inserting user');
+        }
+        res.status(200).send('User added successfully');
+      });
+    }
+  });
+});
 // Start the server
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
