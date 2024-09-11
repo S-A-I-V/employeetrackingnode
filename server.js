@@ -1,10 +1,10 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const multer = require('multer'); // Middleware for handling multipart/form-data
+const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const csvParser = require('csv-parser'); // Library to parse CSV files
+const csvParser = require('csv-parser');
 const mysql = require('mysql');
 
 // Initialize Express app
@@ -77,7 +77,6 @@ app.post('/api/upload-csv', upload.single('file'), (req, res) => {
         for (let user of results) {
           const { employeeid, name, doj, ageing, gender, agency, education, throughput, attendance, stationid, shift } = user;
 
-          // Check if user exists
           const queryCheck = 'SELECT * FROM Employees WHERE employeeid = ?';
           db.query(queryCheck, [employeeid], (err, existingUser) => {
             if (err) {
@@ -88,7 +87,6 @@ app.post('/api/upload-csv', upload.single('file'), (req, res) => {
             if (existingUser.length > 0) {
               console.log(`User with employeeid ${employeeid} already exists. Updating record.`);
 
-              // Update fields but do not overwrite attendance
               const queryUpdate = `
                 UPDATE Employees 
                 SET name = ?, doj = ?, ageing = ?, gender = ?, agency = ?, education = ?, throughput = ?, stationid = ?, shift = ?
@@ -181,14 +179,13 @@ app.delete('/api/remove-user/:employeeid', (req, res) => {
     }
   });
 });
+
 // API to update attendance for a specific employee
 app.post('/api/update-attendance', (req, res) => {
   const { employeeid } = req.body;
 
-  // Get the current day of the month (1-31)
-  const today = new Date().getDate();
+  const today = new Date().getDate(); // Get current day of the month
 
-  // Query to get the current attendance array for the user
   const queryGetAttendance = `
     SELECT attendance FROM Employees WHERE employeeid = ?
   `;
@@ -204,9 +201,8 @@ app.post('/api/update-attendance', (req, res) => {
     }
 
     let attendance = result[0].attendance || '0000000000000000000000000000000';
-
     attendance = attendance.split('');
-    attendance[today - 1] = '1'; 
+    attendance[today - 1] = '1'; // Mark attendance for today
     attendance = attendance.join('');
 
     const queryUpdateAttendance = `
@@ -225,22 +221,24 @@ app.post('/api/update-attendance', (req, res) => {
     });
   });
 });
+
+// API to add a new user
 app.post('/api/add-user', (req, res) => {
   const {
     name,
     employeeid,
     gender,
     education,
-    stationid,
-    shift,
-    attendance,
-    agency,
-    doj,
-    ageing,
-    throughput
+    stationid = null, // Default values for optional fields
+    shift = null,
+    attendance = '0000000000000000000000000000000',
+    agency = 'N/A'
   } = req.body;
 
-  // Check if the employee already exists
+  const doj = new Date().toISOString().slice(0, 10); // Current date as Date of Joining
+  const ageing = 0; // Default value for ageing
+  const throughput = 0; // Default value for throughput
+
   const queryCheck = 'SELECT * FROM Employees WHERE employeeid = ?';
   db.query(queryCheck, [employeeid], (err, existingUser) => {
     if (err) {
@@ -251,7 +249,6 @@ app.post('/api/add-user', (req, res) => {
     if (existingUser.length > 0) {
       console.log(`User with employeeid ${employeeid} already exists. Updating record.`);
 
-      // Update the existing user
       const queryUpdate = `
         UPDATE Employees 
         SET name = ?, doj = ?, ageing = ?, gender = ?, agency = ?, education = ?, throughput = ?, stationid = ?, shift = ?
@@ -280,6 +277,7 @@ app.post('/api/add-user', (req, res) => {
     }
   });
 });
+
 // Start the server
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
