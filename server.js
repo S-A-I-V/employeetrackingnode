@@ -7,16 +7,13 @@ const fs = require('fs');
 const csvParser = require('csv-parser');
 const mysql = require('mysql');
 
-// Initialize Express app
 const app = express();
 const port = 5000; // Adjust the port as needed
 
-// Middleware
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// MySQL Database Connection
 const db = mysql.createConnection({
   host: '192.168.27.143',
   user: 'saideep',
@@ -32,10 +29,8 @@ db.connect(err => {
   console.log('Connected to the MySQL database.');
 });
 
-// Setup Multer for file uploads
-const upload = multer({ dest: 'uploads/' }); // Files will be temporarily stored in the 'uploads' directory
+const upload = multer({ dest: 'uploads/' }); 
 
-// API endpoint to handle CSV data upload
 app.post('/api/upload-csv', upload.single('file'), (req, res) => {
   console.log('File received:', req.file);
 
@@ -48,7 +43,6 @@ app.post('/api/upload-csv', upload.single('file'), (req, res) => {
 
   const results = [];
 
-  // Parse CSV file
   fs.createReadStream(filePath)
     .pipe(csvParser())
     .on('data', (row) => {
@@ -125,8 +119,6 @@ app.post('/api/upload-csv', upload.single('file'), (req, res) => {
       res.status(500).send('Error reading CSV file');
     });
 });
-
-// API to get a single user by employeeid
 app.get('/api/user/:employeeid', (req, res) => {
   const { employeeid } = req.params;
 
@@ -144,7 +136,6 @@ app.get('/api/user/:employeeid', (req, res) => {
   });
 });
 
-// API to update a user (only Station ID and Shift)
 app.post('/api/update-user', (req, res) => {
   const { employeeid, stationid, shift } = req.body;
 
@@ -164,7 +155,6 @@ app.post('/api/update-user', (req, res) => {
   });
 });
 
-// API to remove a user
 app.delete('/api/remove-user/:employeeid', (req, res) => {
   const { employeeid } = req.params;
 
@@ -180,11 +170,10 @@ app.delete('/api/remove-user/:employeeid', (req, res) => {
   });
 });
 
-// API to update attendance for a specific employee
 app.post('/api/update-attendance', (req, res) => {
   const { employeeid } = req.body;
 
-  const today = new Date().getDate(); // Get current day of the month
+  const today = new Date().getDate(); 
 
   const queryGetAttendance = `
     SELECT attendance FROM Employees WHERE employeeid = ?
@@ -202,7 +191,7 @@ app.post('/api/update-attendance', (req, res) => {
 
     let attendance = result[0].attendance || '0000000000000000000000000000000';
     attendance = attendance.split('');
-    attendance[today - 1] = '1'; // Mark attendance for today
+    attendance[today - 1] = '1'; 
     attendance = attendance.join('');
 
     const queryUpdateAttendance = `
@@ -222,20 +211,19 @@ app.post('/api/update-attendance', (req, res) => {
   });
 });
 
-// API to add a new user
 app.post('/api/add-user', (req, res) => {
   const {
     name,
     employeeid,
     gender,
     education,
-    stationid = null, // Default values for optional fields
+    stationid = null, 
     shift = null,
     attendance = '0000000000000000000000000000000',
     agency = 'N/A'
   } = req.body;
 
-  const doj = new Date().toISOString().slice(0, 10); // Current date as Date of Joining
+  const doj = new Date().toISOString().slice(0, 10);
   const ageing = 0; // Default value for ageing
   const throughput = 0; // Default value for throughput
 
@@ -278,7 +266,6 @@ app.post('/api/add-user', (req, res) => {
   });
 });
 
-// Start the server
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
