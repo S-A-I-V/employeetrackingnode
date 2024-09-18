@@ -8,7 +8,7 @@ const csvParser = require('csv-parser');
 const mysql = require('mysql');
 
 const app = express();
-const port = 5000; // Adjust the port as needed
+const port = 5000;
 
 app.use(cors());
 app.use(bodyParser.json());
