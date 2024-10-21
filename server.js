@@ -8,7 +8,7 @@ const csvParser = require('csv-parser');
 const mysql = require('mysql');
 
 const app = express();
-const port = 5000;
+const port = 5006;
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -267,5 +267,5 @@ app.post('/api/add-user', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Server running on http://192.168.27.143:${port}`);
 });
